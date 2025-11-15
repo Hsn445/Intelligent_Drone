@@ -10,6 +10,7 @@ from config import SIM_MODE, PROCESS_INTERVAL, AUDIO_BUFFER_SIZE
 from voice.parser import parse_commands
 from drone.command import execute_command
 from drone.connect import connect_to_drone, cleanup_drone
+from voice.microphone import ensure_headset_profile
 from utils import (
     get_stop_requested,
     set_stop_requested,
@@ -34,6 +35,12 @@ def initialize_audio():
     global model, rec, p, stream
 
     try:
+        # Ensure Bluetooth headset is in correct profile
+        headsetOk, sourceName, msg = ensure_headset_profile()
+        print(msg)
+        if not headsetOk:
+            raise RuntimeError("Headset mic not ready, aborting.")
+        
         # Initialize Vosk model
         model, rec = initialize_speech_recognition()
         print("Vosk model loaded.")
