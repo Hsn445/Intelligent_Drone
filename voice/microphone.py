@@ -19,9 +19,7 @@ def run_cmd(cmd):
                           text=True)
 
 def get_bt_card_name():
-    """
-    Gets the PulseAudio card name for the Bluetooth headset.
-    """
+    """Gets the PulseAudio card name for the Bluetooth headset."""
     result = run_cmd("pactl list cards short")
     for line in result.stdout.splitlines():
         parts = line.split()
@@ -34,6 +32,8 @@ def get_bt_card_name():
 def get_card_active_profile(cardName):
     """
     Gets the active profile string for the given card.
+    Args:
+        cardName: Name of the PulseAudio card
     """
     result = run_cmd("pactl list cards")
     block = []
@@ -56,6 +56,17 @@ def get_card_active_profile(cardName):
     
     return None
 
+def get_headset_source_name():
+    """Get the source name for the headset mic."""
+    result = run_cmd("pactl list sources short")
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and "bluez_source." in parts[1]:
+            if HEADSET_MAC in parts[1] and DESIRED_PROFILE in parts[1]:
+                return parts[1]
+    
+    return None
+
 def set_card_profile(cardName, profile):
     """
     Set the PulseAudio card to the specified profile.
@@ -67,23 +78,16 @@ def set_card_profile(cardName, profile):
     result = run_cmd(cmd)
     return result.returncode == 0
 
-def get_headset_source_name():
-    """
-    Get the source name for the headset mic.
-    """
-    result = run_cmd("pactl list sources short")
-    for line in result.stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and "bluez_source." in parts[1]:
-            if HEADSET_MAC in parts[1] and DESIRED_PROFILE in parts[1]:
-                return parts[1]
-    
-    return None
+def reconnect_headset():
+    """Disconnects and reconnects the Bluetooth headset to ensure MAC address appears."""
+    mac = HEADSET_MAC.replace("_", ":")
+    run_cmd(f"bluetoothctl disconnect {mac}")
+    time.sleep(1.0)
+    run_cmd(f"bluetoothctl connect {mac}")
+    time.sleep(1.0)
 
 def ensure_headset_profile():
-    """
-    Ensures the Bluetooth headset card is in headset_head_unit profile.
-    """
+    """Ensures the Bluetooth headset card is in headset_head_unit profile."""
     # Check PulseAudio server is up
     info = run_cmd("pactl info")
     if info.returncode != 0:
@@ -91,6 +95,15 @@ def ensure_headset_profile():
 
     # Get Bluetooth card name
     card = get_bt_card_name()
+    if not card:
+        # If the card is not found, try reconnecting the headset once
+        reconnect_headset()
+        for _ in range(3):
+            card = get_bt_card_name()
+            if card:
+                break
+            time.sleep(0.25)
+    
     if not card:
         return False, None, "Bluetooth headset card not found (is it connected/trusted?)."
 

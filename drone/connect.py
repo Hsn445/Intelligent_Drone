@@ -4,6 +4,7 @@ Handles drone connection and connection termination via MAVSDK.
 '''
 import asyncio
 from mavsdk import System
+from logger import log_message, log_error, log_event
 from config import (
     SIM_MODE,
     DRONE_CONNECTION_PATH,
@@ -27,12 +28,12 @@ async def wait_for_connection():
 
     async for state in drone.core.connection_state():
         if state.is_connected:
-            print(f"Drone connection confirmed.")
+            log_event("Drone connection confirmed.")
             return True
 
         # Break if timeout is exceeded
         if (asyncio.get_event_loop().time() - startTime) >= CONNECTION_TIMEOUT:
-            print("Connection attempt timed out.")
+            log_error("Connection attempt timed out")
             break
 
         await asyncio.sleep(0.1)
@@ -48,7 +49,7 @@ async def connect_to_drone():
 
     # In simulation mode, skip the connection process
     if SIM_MODE:
-        print("Simulation mode enabled. Skipping drone connection.")
+        log_event("Simulation mode enabled. Skipping drone connection.")
         return None
     
     # Attempt to connect to the drone while under the retry limit
@@ -56,7 +57,7 @@ async def connect_to_drone():
     while retryCount < MAX_CONNECTION_RETRIES:
         try:
             # Displays connection attempt message
-            print(f"Attempting to connect to drone (Attempt {retryCount + 1}/{MAX_CONNECTION_RETRIES})...")
+            log_event(f"Attempting to connect to drone (Attempt {retryCount + 1}/{MAX_CONNECTION_RETRIES})...")
 
             await asyncio.wait_for(
                 drone.connect(system_address=DRONE_CONNECTION_PATH),
@@ -71,7 +72,7 @@ async def connect_to_drone():
 
             # Verify connection stability
             if isConnectionEstablished:
-                print("Successfully connected to the drone. Verifying stability...")
+                log_event("Successfully connected to the drone. Verifying stability...")
                 await asyncio.sleep(1.0)
 
                 try:
@@ -80,7 +81,7 @@ async def connect_to_drone():
                         timeout=CONNECTION_TIMEOUT
                     )
                     if isConnectionStable:
-                        print("Connection stable.")
+                        log_event("Connection stable.")
                         return
                     else:
                         raise ConnectionError("Connection lost during verification.")
@@ -93,33 +94,34 @@ async def connect_to_drone():
         except asyncio.TimeoutError:
             retryCount += 1
             if retryCount < MAX_CONNECTION_RETRIES:
-                print(f"Connection attempt timed out. Retrying in {retryDelay} seconds...")
+                log_message(f"Connection attempt timed out. Retrying in {retryDelay} seconds...")
                 await asyncio.sleep(retryDelay)
                 retryDelay *= RETRY_BACKOFF_MULTIPLIER
             else:
-                print("Maximum connection attempts reached. Unable to connect to the drone.")
+                log_error("Maximum connection attempts reached. Unable to connect to the drone")
                 raise ConnectionError(f"Drone connection failed after {MAX_CONNECTION_RETRIES} attempts.")
         
         # Connection error handling
         except ConnectionError as e:
             retryCount += 1
             if retryCount < MAX_CONNECTION_RETRIES:
-                print(f"Connection error occurred: {e}. Retrying in {retryDelay} seconds...")
+                log_error(f"Connection error occurred: {e}. Retrying in {retryDelay} seconds...")
                 await asyncio.sleep(retryDelay)
                 retryDelay *= RETRY_BACKOFF_MULTIPLIER
             else:
-                print(f"Maximum connection attempts reached. Unable to connect to the drone. Last error: {e}")
+                log_error(f"Maximum connection attempts reached. Unable to connect to the drone. Last error: {e}")
                 raise ConnectionError(f"Drone connection failed after {MAX_CONNECTION_RETRIES} attempts.")
         
         # Unexpected error handling
         except Exception as e:
             retryCount += 1
             if retryCount < MAX_CONNECTION_RETRIES:
-                print(f"Unexpected error occurred: {e}. Retrying in {retryDelay} seconds...")
+                log_error(f"Unexpected error occurred", e)
+                log_message(f"Retrying in {retryDelay} seconds...")
                 await asyncio.sleep(retryDelay)
                 retryDelay *= RETRY_BACKOFF_MULTIPLIER
             else:
-                print(f"Maximum connection attempts reached. Unable to connect to the drone. Last error: {e}")
+                log_error(f"Maximum connection attempts reached. Unable to connect to the drone. Last error", e)
                 raise ConnectionError(f"Drone connection failed after {MAX_CONNECTION_RETRIES} attempts.")
 
 async def cleanup_drone():
@@ -131,10 +133,10 @@ async def cleanup_drone():
             try:
                 await asyncio.wait_for(drone.offboard.stop(), timeout=OFFBOARD_TIMEOUT)
             except asyncio.TimeoutError:
-                print("Timeout while stopping offboard mode during cleanup.")
+                log_error("Timeout while stopping offboard mode during cleanup")
             finally:
                 reset_instance()
     
     # General exception handling
     except Exception as e:
-        print(f"Error disabling offboard mode: {e}")
+        log_error("Error disabling offboard mode", e)

@@ -7,6 +7,7 @@ import math
 from mavsdk.action import ActionError
 from mavsdk.offboard import OffboardError, PositionNedYaw
 from utils import convert_to_meters, get_stop_requested
+from logger import log_message, log_command, log_error, log_event
 from config import (
     SIM_MODE,
     ACTION_TIMEOUT,
@@ -32,7 +33,7 @@ async def execute_command(cmdType, distVal, distType):
     """
     # Check for stop request at start of command
     if get_stop_requested() and cmdType != "STOP":
-        print(f"Skipping {cmdType} due to STOP request")
+        log_message(f"Skipping {cmdType} due to STOP request")
         return
         
     # Get current drone and offboard states
@@ -47,17 +48,21 @@ async def execute_command(cmdType, distVal, distType):
         # In SIM_MODE, skip actual command execution and print the command instead
         if SIM_MODE:
             # If a command that disables offboard is issued, update the offboard state
-            if cmdType in ("STOP", "STANDBY", "LAND", "DISARM") and offboard:
+            if cmdType in ("STOP", "RETURN", "LAND", "DISARM", "SHUTDOWN") and offboard:
                 set_offboard_state(False)
             elif cmdType in ("FORWARD", "BACKWARD", "UP", "DOWN", "LEFT", "RIGHT", "RO_LEFT", "RO_RIGHT", "TAKEOFF", "ARM"):
                 set_offboard_state(True)
             
             # Print the command
-            print(f"(SIMULATION) Executing: {cmdType} {distVal or ''} {distType or ''}".strip())
+            log_command(cmdType, distVal, distType)
+            
+            # Return SHUTDOWN if called
+            if cmdType == "SHUTDOWN":
+                return "SHUTDOWN"
             return
         
         # While SIM_MODE is False, execute commands on the drone
-        if offboard and cmdType in ("STOP", "STANDBY", "LAND", "DISARM"):
+        if offboard and cmdType in ("STOP", "RETURN", "LAND", "DISARM", "SHUTDOWN"):
             try:
                 await asyncio.wait_for(drone.offboard.stop(), timeout=OFFBOARD_TIMEOUT)
                 offboard = False
@@ -65,33 +70,36 @@ async def execute_command(cmdType, distVal, distType):
 
             # Timeout error handling (still assume offboard is disabled)
             except asyncio.TimeoutError:
-                print("Error: Offboard stop timed out.")
+                log_error("Offboard stop timed out")
                 offboard = False
                 set_offboard_state(offboard)
                 return
 
         # Execute basic commands
         if cmdType == "STOP":
-            print("Executing: STOP")
+            log_command("STOP")
             await asyncio.wait_for(drone.action.hold(), timeout=ACTION_TIMEOUT)
-        elif cmdType == "STANDBY":  # Re-evaluate this command's function
-            print("Executing: STANDBY")
+        elif cmdType == "RETURN":
+            log_command("RETURN")
             await asyncio.wait_for(drone.action.return_to_launch(), timeout=ACTION_TIMEOUT)
+        elif cmdType == "SHUTDOWN":
+            log_command("SHUTDOWN")
+            return "SHUTDOWN"
         elif cmdType == "LAND":
-            print("Executing: LAND")
+            log_command("LAND")
             await asyncio.wait_for(drone.action.land(), timeout=ACTION_TIMEOUT)
         elif cmdType == "DISARM":
-            print("Executing: DISARM")
+            log_command("DISARM")
             await asyncio.wait_for(drone.action.disarm(), timeout=ACTION_TIMEOUT)
         elif cmdType == "ARM":
-            print("Executing: ARM")
+            log_command("ARM")
             await asyncio.wait_for(drone.action.arm(), timeout=ACTION_TIMEOUT)
         elif cmdType == "TAKEOFF":
             if distMeters:
-                print(f"Executing: TAKEOFF ({distVal} {distType})")
+                log_command("TAKEOFF", distVal, distType)
                 await asyncio.wait_for(drone.action.set_takeoff_altitude(distMeters), timeout=ACTION_TIMEOUT)
             else:
-                print("Executing: TAKEOFF")
+                log_command("TAKEOFF")
                 await asyncio.wait_for(drone.action.set_takeoff_altitude(1.0), timeout=ACTION_TIMEOUT)
             
             await asyncio.wait_for(drone.action.takeoff(), timeout=ACTION_TIMEOUT)
@@ -99,29 +107,29 @@ async def execute_command(cmdType, distVal, distType):
         # Execute movement commands
         elif cmdType in ("FORWARD", "BACKWARD", "UP", "DOWN", "LEFT", "RIGHT"):
             if distMeters:
-                print(f"Executing: MOVE {cmdType} {distVal} {distType}")
+                log_command(f"MOVE {cmdType}", distVal, distType)
                 await asyncio.wait_for(execute_movement_command(cmdType, distMeters), timeout=MOVEMENT_TIMEOUT)
             else:
-                print(f"Executing: MOVE {cmdType} 1 meter")
-                await asyncio.wait_for(execute_movement_command(cmdType, 1.0), timeout=MOVEMENT_TIMEOUT)
+                log_command(f"MOVE {cmdType}", 10, "cm")
+                await asyncio.wait_for(execute_movement_command(cmdType, 0.1), timeout=MOVEMENT_TIMEOUT)
         
         # Execute rotation commands
         elif cmdType in ("RO_LEFT", "RO_RIGHT"):
-            print(f"Executing: {cmdType} {distVal or 90} degrees")
+            log_command(cmdType, distVal or 90, "degrees")
             await asyncio.wait_for(execute_rotation_command(cmdType, distMeters or 90), timeout=MOVEMENT_TIMEOUT)
         
     # Timeout error handling
     except asyncio.TimeoutError:
-        print(f"Error: {cmdType} command timed out.")
+        log_error(f"{cmdType} command timed out")
     # Action error handling
     except ActionError as actionErr:
-        print(f"Action error during {cmdType}: {actionErr}")
+        log_error(f"Action error during {cmdType}", actionErr)
     # Offboard error handling
     except OffboardError as offboardErr:
-        print(f"Offboard error during {cmdType}: {offboardErr}")
+        log_error(f"Offboard error during {cmdType}", offboardErr)
     # General exception handling
     except Exception as e:
-        print(f"Unexpected error during {cmdType}: {e}")
+        log_error(f"Unexpected error during {cmdType}", e)
 
 async def execute_movement_command(direction, distance):
     """
@@ -144,7 +152,7 @@ async def execute_movement_command(direction, distance):
     # Get direction vector
     dirOffset = BASE_DIRECTION_OFFSETS.get(direction)
     if not dirOffset:
-        print(f"Error: Unknown direction '{direction}'")
+        log_error(f"Unknown direction '{direction}'")
         return
     
     # Get current yaw to adjust movement direction
@@ -155,7 +163,7 @@ async def execute_movement_command(direction, distance):
             break
     # General exception handling. If error occurs, default to 0.0 degrees.
     except Exception as e:
-        print(f"Error getting current yaw: {e}")
+        log_error("Error getting current yaw", e)
         yaw = 0.0
 
     # Convert yaw from degrees to radians for trigonometric calculations
@@ -190,7 +198,7 @@ async def execute_movement_command(direction, distance):
     # Checks for interruption during sleep. 10 iterations of 0.1s = 1s total
     for i in range(10):
         if get_stop_requested():
-            print("Movement command interrupted!")
+            log_event("Movement command interrupted!")
             return
         await asyncio.sleep(0.1)
 
@@ -221,7 +229,7 @@ async def execute_rotation_command(direction, angle):
     
     # General exception handling.
     except Exception as e:
-        print(f"Error getting current yaw: {e}")
+        log_error("Error getting current yaw", e)
     
     yaw = yaw + angle if direction == "RO_RIGHT" else yaw - angle
 
@@ -235,7 +243,7 @@ async def execute_rotation_command(direction, angle):
     # Check for interruption during sleep. 10 iterations of 0.1s = 1s total.
     for i in range(10):
         if get_stop_requested():
-            print("Rotation command interrupted!")
+            log_event("Rotation command interrupted!")
             return
         await asyncio.sleep(0.1)
 
@@ -257,7 +265,7 @@ async def _initialize_offboard(drone):
     
     # Handles errors. If error occurs, default to origin.
     except Exception as e:
-        print(f"Could not get NED position. Setting to origin: {e}")
+        log_error("Could not get NED position. Setting to origin", e)
         nedPos = [0.0, 0.0, 0.0]
     
     set_ned_position(nedPos)

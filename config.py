@@ -11,6 +11,8 @@ SIM_MODE = True     # Set to True for simulation mode, False for real drone
 
 MODEL_LOCATION = r"MODEL_LOCATION"  # Absolute path to vosk model
 
+HEADSET_MAC = "40_58_99_5B_08_79"  # Headset MAC address fragment
+
 # Connection and timeout settings (in seconds)
 CONNECTION_TIMEOUT = 45.0       # Initial drone connection
 ACTION_TIMEOUT = 15.0           # Basic actions (arm, disarm, takeoff, land)
@@ -47,7 +49,7 @@ UNIT_PATTERNS = {                                       # Measurement units
 # List of valid commands and trigger phrases. Dictionary condensed for faster lookup.
 COMMAND_DICT = {
     "STOP":     ["stop", "stop drone"],
-    "STANDBY":  ["standby", "stand by"],    # Re-evaluate this command's function
+    "RETURN":   ["return", "come home", "home"],
     "LAND":     ["land", "land drone"],
     "FORWARD":  ["forward"],
     "BACKWARD": ["backward"],
@@ -60,6 +62,7 @@ COMMAND_DICT = {
     "TAKEOFF":  ["takeoff", "take off"],
     "DISARM":   ["disarm", "disarm drone"],
     "ARM":      ["arm", "arm drone"],
+    "SHUTDOWN": ["shutdown", "power off"],
 }
 COMMAND_LOOKUP = {trigger: cmdType for cmdType, triggers in COMMAND_DICT.items() for trigger in triggers}
 
