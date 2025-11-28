@@ -169,51 +169,7 @@ async def execute_command(cmdType, distVal, distType):
         # Execute basic commands
         if cmdType == "ARM":
             log_command("ARM")
-            
-            # Pre-flight checks before arming
-            log_event("Performing pre-flight checks...")
-            
-            # Check GPS fix
-            hasGps, numSats = await check_gps_fix(drone)
-            if not hasGps:
-                log_error(f"Cannot arm: GPS fix not acquired (Satellites: {numSats}). Need 3D GPS fix.")
-                return
-            log_event(f"GPS OK: 3D Fix with {numSats} satellites")
-            
-            # Check home position
-            hasHome = await check_home_position(drone)
-            if not hasHome:
-                log_error("Cannot arm: Home position not set.")
-                return
-            log_event("Home position OK")
-            
-            # Check health status
-            health = await check_health_status(drone)
-            if health:
-                if not health['is_gyrometer_calibration_ok']:
-                    log_error("Cannot arm: Gyroscope calibration failed.")
-                    return
-                if not health['is_accelerometer_calibration_ok']:
-                    log_error("Cannot arm: Accelerometer calibration failed.")
-                    return
-                if not health['is_magnetometer_calibration_ok']:
-                    log_error("Cannot arm: Magnetometer calibration failed.")
-                    return
-                if not health['is_global_position_ok']:
-                    log_error("Cannot arm: Global position not valid.")
-                    return
-                log_event("All sensor calibrations OK")
-            
-            # Log current flight mode
-            currentMode = await check_flight_mode(drone)
-            log_event(f"Current flight mode: {currentMode}")
-            
-            # Attempt to arm
-            log_event("All pre-flight checks passed. Arming...")
             await asyncio.wait_for(drone.action.arm(), timeout=ACTION_TIMEOUT)
-            log_event("Drone armed successfully")
-            return
-        
         elif cmdType == "STOP":
             # Check if drone is armed and in the air before holding position
             isArmed = await check_armed_state(drone)
