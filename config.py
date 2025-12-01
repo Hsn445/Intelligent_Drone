@@ -9,9 +9,11 @@ import re
 # Editable parameters:
 SIM_MODE = True     # Set to True for simulation mode, False for real drone
 
-MODEL_LOCATION = r"MODEL_LOCATION"  # Absolute path to vosk model
+MODEL_LOCATION = r"C:\Senior Design\vosk-model-small-en-us-0.15"  # Absolute path to vosk model
 
 HEADSET_MAC = "40_58_99_5B_08_79"  # Headset MAC address fragment
+
+DRONE_CONNECTION_PATH = "udp://:14540" if SIM_MODE else "serial:///dev/ttyUSB0:115200"  # Drone connection path (Update else clause as needed)
 
 # Connection and timeout settings (in seconds)
 CONNECTION_TIMEOUT = 45.0       # Initial drone connection
@@ -28,11 +30,11 @@ RETRY_BACKOFF_MULTIPLIER = 2.0  # Multiplier for exponential backoff delay
 AUDIO_FORMAT = "paInt16"        # Audio format (review PyAudio documentation for other options)
 AUDIO_CHANNELS = 1              # Number of audio channels (1 for mono, 2 for stereo)
 AUDIO_RATE = 16000              # Audio sample rate (Hz)
-AUDIO_BUFFER_SIZE = 2048        # Number of audio frames per buffer
+AUDIO_BUFFER_SIZE = 4096        # Number of audio frames per buffer
 PROCESS_INTERVAL = 0.1          # Minimum time between audio processing cycles (seconds)
 
-# Drone connection path (Update else clause as needed)
-DRONE_CONNECTION_PATH = "udp://:14540" if SIM_MODE else "serial:///dev/ttyUSB0:115200"
+# Noise testing settings
+NOISE_LEVEL = 0.0               # Gaussian noise level (Keep at 0.0 for no noise)
 
 """DO NOT EDIT BELOW THIS LINE"""
 # Pre-compiled regex patterns
