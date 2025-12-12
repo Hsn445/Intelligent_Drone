@@ -57,7 +57,7 @@ async def check_gps_fix(drone):
     """
     try:
         async for gpsInfo in drone.telemetry.gps_info():
-            # GPS fix type: 0=No GPS, 1=No Fix, 2=2D Fix, 3=3D Fix
+            # GPS fix type: 0 = No GPS, 1 = No Fix, 2 = 2D Fix, 3 = 3D Fix
             hasFix = gpsInfo.fix_type >= 3
             numSatellites = gpsInfo.num_satellites
             return (hasFix, numSatellites)

@@ -14,7 +14,8 @@ from config import (
     AUDIO_CHANNELS,
     AUDIO_RATE,
     AUDIO_BUFFER_SIZE,
-    NOISE_LEVEL
+    NOISE_TESTING,
+    SNR_DB
 )
 
 def initialize_speech_recognition():
@@ -49,26 +50,36 @@ def initialize_audio_stream():
         print(f"Error initializing audio stream: {e}")
         raise
 
-def add_gaussian_noise(audioData, noiseLevel):
+def add_gaussian_noise_snr(audioData, snrDb):
     """
-    Add Gaussian noise to audio data (for testing purposes).
+    Add Gaussian noise to achieve target SNR (for testing purposes).
     Args:
         audioData: Raw audio data bytes
-        noiseLevel: Standard deviation of Gaussian noise (0.0 = no noise)
+        snrDb: Desired Signal-to-Noise Ratio in dB (higher is cleaner)
     Returns:
         Audio data with added noise as bytes
     """
-    # Convert bytes to numpy array of int16 values
-    audioArray = np.frombuffer(audioData, dtype=np.int16).copy()
+    # Convert byte data to numpy array
+    audio = np.frombuffer(audioData, dtype=np.int16).astype(np.float32)
+    if audio.size == 0:
+        return audioData
     
-    # Generate Gaussian noise
-    noise = np.random.normal(0, noiseLevel * 32768, audioArray.shape).astype(np.int16)
+    # Compute signal power
+    signalPower = np.mean(audio ** 2)
+    if signalPower <= 1e-8:
+        return audioData
     
-    # Add noise to audio and clip to int16 range
-    noisyAudio = np.clip(audioArray.astype(np.int32) + noise.astype(np.int32), -32768, 32767).astype(np.int16)
-    
-    # Convert back to bytes
-    return noisyAudio.tobytes()
+    # Compute noise power for desired SNR
+    snrLinear = 10.0 ** (snrDb / 10.0)
+    noisePower = signalPower / snrLinear
+    noiseStD = np.sqrt(noisePower)
+
+    # Generate and add Gaussian noise
+    noise = np.random.normal(0.0, noiseStD, audio.shape)
+    noisy = audio + noise
+    noisy = np.clip(noisy, -32768, 32767).astype(np.int16)
+
+    return noisy.tobytes()
 
 def process_audio(rec, data):
     """
@@ -78,9 +89,9 @@ def process_audio(rec, data):
         data: Audio data
     """
     try:
-        # Add Gaussian noise if NOISE_LEVEL > 0
-        if NOISE_LEVEL > 0:
-            data = add_gaussian_noise(data, NOISE_LEVEL)
+        # Add Gaussian noise if NOISE_TESTING is enabled
+        if NOISE_TESTING and data:
+            data = add_gaussian_noise_snr(data, SNR_DB)
         
         # Otherwise, process audio normally
         if rec.AcceptWaveform(data):
